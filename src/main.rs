@@ -2,8 +2,8 @@ extern crate cocoa;
 extern crate gtk;
 extern crate objc;
 
-use gtk::prelude::*;
-use gtk::{Label, ListBox, ListBoxRow, Window, WindowType};
+use gtk::{prelude::*, Orientation};
+use gtk::{Box, Image, Label, ListBox, ListBoxRow, Window, WindowType};
 use log::{info, warn};
 
 use std::process::Command;
@@ -28,20 +28,16 @@ fn get_active_application_name() -> String {
         .arg("command=")
         .output()
         .expect("Failed to execute ps");
-
     let ps_stdout = str::from_utf8(&ps_output.stdout)
         .expect("Could not convert to string")
         .trim()
         .to_string();
 
-    if ps_stdout.contains("Code") {
-        return "VS Code".to_string();
-    }
     // Add more conditions for other Electron apps if needed
     ps_stdout
 }
 
-fn block_unauthorized_launch(app_name: &str) {
+fn block_unauthorized_launch(app_name: String) {
     info!("Unauthorized launch of {} detected. Blocking...", app_name);
     // Get the process ID of the unauthorized application
     let output = Command::new("pgrep")
@@ -75,7 +71,7 @@ fn block_unauthorized_launch(app_name: &str) {
     }
 }
 
-fn initialize_gui(whitelist: Vec<&str>) {
+fn initialize_gui(whitelist: Vec<String>) {
     // Initialize GTK
     gtk::init().expect("Failed to initialize GTK.");
     // Create a new top-level window and set its title
@@ -84,10 +80,15 @@ fn initialize_gui(whitelist: Vec<&str>) {
     window.set_default_size(800, 1200);
     let list_box = ListBox::new();
     // Populate the ListBox with the whitelisted apps
-    for app in whitelist.iter() {
+    for app_name in whitelist {
         let row = ListBoxRow::new();
-        let label = Label::new(Some(app));
-        row.add(&label);
+        let hbox = Box::new(Orientation::Horizontal, 10);
+
+        let label = Label::new(Some(&app_name));
+
+        hbox.pack_start(&label, false, false, 0);
+
+        row.add(&hbox);
         list_box.add(&row);
     }
     window.add(&list_box);
@@ -105,12 +106,10 @@ fn initialize_gui(whitelist: Vec<&str>) {
 fn main() {
     env_logger::init();
     let whitelist = vec![
-        "VS Code",
-        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        ("/Applications/Visual Studio Code.app/Contents/MacOS/Electron".to_string()),
+        ("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome".to_string()),
     ];
-
-    let whitelist_clone = whitelist.clone();
-
+    let app_names: Vec<String> = whitelist.iter().map(|x| x.clone()).collect();
     // Spawn a new thread to run your focus session loop
     thread::spawn(move || {
         let focus_duration = Duration::from_secs(1 * 60);
@@ -127,9 +126,9 @@ fn main() {
                 info!("Focus session ended. You can now use any application.");
                 break;
             }
-            if !whitelist_clone.contains(&app_name.as_str()) {
+            if !app_names.contains(&app_name) {
                 info!("Unauthorized launch of {} detected. Blocking...", app_name);
-                block_unauthorized_launch(&app_name);
+                block_unauthorized_launch(app_name);
             }
             thread::sleep(Duration::from_secs(2));
         }
