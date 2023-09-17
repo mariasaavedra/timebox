@@ -2,11 +2,11 @@ extern crate cocoa;
 extern crate gtk;
 extern crate objc;
 
-
-use gtk::{prelude::*, Orientation};
-use gtk::{Box, Image, Label, ListBox, ListBoxRow, Window, WindowType};
+use gtk::{prelude::*, DrawingArea, Orientation};
+use gtk::{Box, Label, ListBox, ListBoxRow, Window, WindowType};
 use log::{info, warn};
 
+use std::ops::ControlFlow;
 use std::process::Command;
 use std::str;
 use std::thread;
@@ -65,8 +65,6 @@ fn block_unauthorized_launch(app_name: String) {
                 .arg(pid)
                 .output()
                 .expect("Failed to execute kill");
-
-            // Additional debug information
             info!("Kill command output for PID {}: {:?}", pid, kill_output);
         }
     }
@@ -77,6 +75,16 @@ fn initialize_gui(whitelist: Vec<String>) {
     gtk::init().expect("Failed to initialize GTK.");
     // Create a new top-level window and set its title
     let window = Window::new(WindowType::Toplevel);
+    let drawing_area = DrawingArea::new();
+    drawing_area.connect_draw(|_, context| {
+        // Set the background color to black
+        context.set_source_rgba(0.0, 0.0, 0.0, 1.0);
+        let _ = context.paint();
+        false.into()
+    });
+
+    // Add the DrawingArea to the window
+    window.add(&drawing_area);
     window.set_title("Whitelisted Apps");
     window.set_default_size(800, 1200);
     let list_box = ListBox::new();
@@ -86,7 +94,6 @@ fn initialize_gui(whitelist: Vec<String>) {
         let hbox = Box::new(Orientation::Horizontal, 10);
         let label = Label::new(Some(&app_name));
         hbox.pack_start(&label, false, false, 0);
-
         row.add(&hbox);
         list_box.add(&row);
     }
@@ -107,31 +114,44 @@ fn main() {
     let whitelist = vec![
         ("/Applications/Visual Studio Code.app/Contents/MacOS/Electron".to_string()),
         ("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome".to_string()),
+        ("target/debug/app".to_string()),
+        ("target/release/app".to_string()),
     ];
     let app_names: Vec<String> = whitelist.iter().map(|x| x.clone()).collect();
     // Spawn a new thread to run your focus session loop
     thread::spawn(move || {
         let focus_duration = Duration::from_secs(1 * 60);
         let start_time = Instant::now();
-        loop {
-            let app_name = get_active_application_name();
-            info!("Current application: {}", app_name);
-            let elapsed_time = Instant::now().duration_since(start_time);
-            if elapsed_time <= focus_duration {
-                info!("Focus session in progress.");
-            }
-            if elapsed_time >= focus_duration {
-                info!("Focus session ended. You can now use any application.");
-                break;
-            }
-            if !app_names.contains(&app_name) {
-                info!("Unauthorized launch of {} detected. Blocking...", app_name);
-                block_unauthorized_launch(app_name);
-            }
-            thread::sleep(Duration::from_secs(1));
+        let mut is_montitoring = true;
+        while is_montitoring {
+            is_montitoring = match monitor(start_time, focus_duration, &app_names) {
+                ControlFlow::Continue(_) => true,
+                ControlFlow::Break(_) => false,
+            };
         }
     });
-
-    // Initialize GUI
     initialize_gui(whitelist);
+}
+
+fn monitor(
+    start_time: Instant,
+    focus_duration: Duration,
+    app_names: &Vec<String>,
+) -> ControlFlow<()> {
+    let app_name = get_active_application_name();
+    info!("Current application: {}", app_name);
+    let elapsed_time = Instant::now().duration_since(start_time);
+    if elapsed_time <= focus_duration {
+        info!("Focus session in progress.");
+    }
+    if elapsed_time >= focus_duration {
+        info!("Focus session ended. You can now use any application.");
+        return ControlFlow::Break(());
+    }
+    if !app_names.contains(&app_name) {
+        info!("Unauthorized launch of {} detected. Blocking...", app_name);
+        block_unauthorized_launch(app_name);
+    }
+    thread::sleep(Duration::from_secs(1));
+    ControlFlow::Continue(())
 }
