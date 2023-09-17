@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 cocoa = "0.25.0"
 env_logger = "0.10.0"
+glib = "0.18.2"
 gtk = "0.18.1"
 log = "0.4.20"
 objc = "0.2.7"

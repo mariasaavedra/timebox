@@ -1,6 +1,9 @@
 extern crate cocoa;
+extern crate gtk;
 extern crate objc;
 
+use gtk::prelude::*;
+use gtk::{Label, ListBox, ListBoxRow, Orientation, Window, WindowType};
 use log::{info, warn};
 use std::collections::HashSet;
 use std::process::Command;
@@ -40,7 +43,6 @@ fn get_active_application_name() -> String {
 
 fn block_unauthorized_launch(app_name: &str) {
     info!("Unauthorized launch of {} detected. Blocking...", app_name);
-
     // Get the process ID of the unauthorized application
     let output = Command::new("pgrep")
         .arg("-f")
@@ -58,7 +60,6 @@ fn block_unauthorized_launch(app_name: &str) {
         warn!("No matching PID found.");
         return;
     }
-
     // Terminate the unauthorized applications
     for pid in pids {
         if !pid.is_empty() {
@@ -74,17 +75,52 @@ fn block_unauthorized_launch(app_name: &str) {
     }
 }
 
+fn initialize_gui(whitelist: Vec<&str>) {
+    // Initialize GTK
+    gtk::init().expect("Failed to initialize GTK.");
+    // Create a new top-level window and set its title
+    let window = Window::new(WindowType::Toplevel);
+    window.set_title("Whitelisted Apps");
+    // Create a ListBox
+    let list_box = ListBox::new();
+
+    // Populate the ListBox with the whitelisted apps
+    for app in whitelist.iter() {
+        let row = ListBoxRow::new();
+        let label = Label::new(Some(app));
+        row.add(&label);
+        list_box.add(&row);
+    }
+    // Add ListBox to the window
+    window.add(&list_box);
+    // Show all elements
+    window.show_all();
+    // Handle the 'destroy' event to terminate the GTK main loop when the window is closed
+    window.connect_delete_event(|_, _| {
+        gtk::main_quit();
+        gtk::glib::signal::Propagation::Stop
+    });
+
+    // GTK main event loop
+    gtk::main();
+}
+
 fn main() {
     env_logger::init();
-    // Define the whitelist of allowed applications
-    let whitelist: HashSet<String> = [
-        "VS Code".to_string(),
-        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome".to_string(),
-    ]
-    .iter()
-    .cloned()
-    .collect();
 
+    // Initialize GTK
+    gtk::init().expect("Failed to initialize GTK.");
+
+    // Create a new top-level window and set its title
+    let window = Window::new(WindowType::Toplevel);
+    window.set_title("Whitelisted Apps");
+    let list_box = ListBox::new(); // Create a ListBox
+    let whitelist = vec![
+        "VS Code",
+        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    ];
+     // Initialize GUI
+     initialize_gui(whitelist.clone());
     // Define the duration of the focus session (25 minutes)
     let focus_duration = Duration::from_secs(1 * 60);
     // Get the start time of the focus session
@@ -106,7 +142,7 @@ fn main() {
         }
         // Check if the current application is not in the whitelist
         // Block the unauthorized launch (terminate the process)
-        if !whitelist.contains(&app_name) {
+        if !whitelist.contains(&app_name.as_str()) {
             info!("Unauthorized launch of {} detected. Blocking...", app_name);
             block_unauthorized_launch(&app_name);
         }
