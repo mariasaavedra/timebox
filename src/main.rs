@@ -2,6 +2,7 @@ extern crate cocoa;
 extern crate gtk;
 extern crate objc;
 
+
 use gtk::{prelude::*, Orientation};
 use gtk::{Box, Image, Label, ListBox, ListBoxRow, Window, WindowType};
 use log::{info, warn};
@@ -83,9 +84,7 @@ fn initialize_gui(whitelist: Vec<String>) {
     for app_name in whitelist {
         let row = ListBoxRow::new();
         let hbox = Box::new(Orientation::Horizontal, 10);
-
         let label = Label::new(Some(&app_name));
-
         hbox.pack_start(&label, false, false, 0);
 
         row.add(&hbox);
@@ -117,7 +116,6 @@ fn main() {
         loop {
             let app_name = get_active_application_name();
             info!("Current application: {}", app_name);
-            thread::sleep(Duration::from_secs(2));
             let elapsed_time = Instant::now().duration_since(start_time);
             if elapsed_time <= focus_duration {
                 info!("Focus session in progress.");
@@ -130,7 +128,7 @@ fn main() {
                 info!("Unauthorized launch of {} detected. Blocking...", app_name);
                 block_unauthorized_launch(app_name);
             }
-            thread::sleep(Duration::from_secs(2));
+            thread::sleep(Duration::from_secs(1));
         }
     });
 
