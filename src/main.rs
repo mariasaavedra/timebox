@@ -3,9 +3,9 @@ extern crate gtk;
 extern crate objc;
 
 use gtk::prelude::*;
-use gtk::{Label, ListBox, ListBoxRow, Orientation, Window, WindowType};
+use gtk::{Label, ListBox, ListBoxRow, Window, WindowType};
 use log::{info, warn};
-use std::collections::HashSet;
+
 use std::process::Command;
 use std::str;
 use std::thread;
@@ -81,9 +81,8 @@ fn initialize_gui(whitelist: Vec<&str>) {
     // Create a new top-level window and set its title
     let window = Window::new(WindowType::Toplevel);
     window.set_title("Whitelisted Apps");
-    // Create a ListBox
+    window.set_default_size(800, 1200);
     let list_box = ListBox::new();
-
     // Populate the ListBox with the whitelisted apps
     for app in whitelist.iter() {
         let row = ListBoxRow::new();
@@ -91,9 +90,7 @@ fn initialize_gui(whitelist: Vec<&str>) {
         row.add(&label);
         list_box.add(&row);
     }
-    // Add ListBox to the window
     window.add(&list_box);
-    // Show all elements
     window.show_all();
     // Handle the 'destroy' event to terminate the GTK main loop when the window is closed
     window.connect_delete_event(|_, _| {
@@ -107,45 +104,37 @@ fn initialize_gui(whitelist: Vec<&str>) {
 
 fn main() {
     env_logger::init();
-
-    // Initialize GTK
-    gtk::init().expect("Failed to initialize GTK.");
-
-    // Create a new top-level window and set its title
-    let window = Window::new(WindowType::Toplevel);
-    window.set_title("Whitelisted Apps");
-    let list_box = ListBox::new(); // Create a ListBox
     let whitelist = vec![
         "VS Code",
         "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
     ];
-     // Initialize GUI
-     initialize_gui(whitelist.clone());
-    // Define the duration of the focus session (25 minutes)
-    let focus_duration = Duration::from_secs(1 * 60);
-    // Get the start time of the focus session
-    let start_time = Instant::now();
 
-    // Main loop for enforcing the focus session
-    loop {
-        // Check if the focus session has ended
-        let app_name = get_active_application_name();
-        info!("Current application: {}", app_name);
-        thread::sleep(Duration::from_secs(2));
-        let elapsed_time = Instant::now().duration_since(start_time);
-        if elapsed_time <= focus_duration {
-            info!("Focus session in progress.");
+    let whitelist_clone = whitelist.clone();
+
+    // Spawn a new thread to run your focus session loop
+    thread::spawn(move || {
+        let focus_duration = Duration::from_secs(1 * 60);
+        let start_time = Instant::now();
+        loop {
+            let app_name = get_active_application_name();
+            info!("Current application: {}", app_name);
+            thread::sleep(Duration::from_secs(2));
+            let elapsed_time = Instant::now().duration_since(start_time);
+            if elapsed_time <= focus_duration {
+                info!("Focus session in progress.");
+            }
+            if elapsed_time >= focus_duration {
+                info!("Focus session ended. You can now use any application.");
+                break;
+            }
+            if !whitelist_clone.contains(&app_name.as_str()) {
+                info!("Unauthorized launch of {} detected. Blocking...", app_name);
+                block_unauthorized_launch(&app_name);
+            }
+            thread::sleep(Duration::from_secs(2));
         }
-        if elapsed_time >= focus_duration {
-            info!("Focus session ended. You can now use any application.");
-            break;
-        }
-        // Check if the current application is not in the whitelist
-        // Block the unauthorized launch (terminate the process)
-        if !whitelist.contains(&app_name.as_str()) {
-            info!("Unauthorized launch of {} detected. Blocking...", app_name);
-            block_unauthorized_launch(&app_name);
-        }
-        thread::sleep(Duration::from_secs(2));
-    }
+    });
+
+    // Initialize GUI
+    initialize_gui(whitelist);
 }
